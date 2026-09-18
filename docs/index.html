@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Prioritizing Content Refresh Opportunities Using Historical Search Signals</title>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 900px;
+      margin: 40px auto;
+      padding: 0 20px;
+      line-height: 1.65;
+      color: #222;
+    }
+
+    h1, h2 {
+      color: #111;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 20px 0;
+    }
+
+    th, td {
+      border: 1px solid #ddd;
+      padding: 10px;
+      text-align: left;
+    }
+
+    th {
+      background: #f4f4f4;
+    }
+
+    .note {
+      background: #f7f7f7;
+      padding: 15px;
+      border-left: 4px solid #555;
+      margin: 20px 0;
+    }
+
+    code {
+      background: #f4f4f4;
+      padding: 2px 5px;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h1>Prioritizing Content Refresh Opportunities Using Historical Search Signals</h1>
+
+  <p>
+    This project looks at a simple practical problem: if a content team has a large number of pages, which ones should they review first?
+  </p>
+
+  <h2>Abstract</h2>
+
+  <p>
+    The aim of this project was to test whether historical search and content signals could be used to rank pages that may deserve refresh attention.
+    I used page-level search performance data from the FlyRank ML Internship warehouse and built a simple baseline, a Logistic Regression model, and a Random Forest model.
+    To make the evaluation more realistic, I split the data by client instead of randomly splitting individual rows.
+    On the final grouped test set, the Random Forest reached a Precision@20 of 0.95 and a Precision@50 of 0.96.
+    The result suggests that these signals can be useful for prioritizing manual review, but the model should not be treated as proof that refreshing a page will directly improve its search performance.
+  </p>
+
+  <h2>Introduction / Problem Statement</h2>
+
+  <p>
+    A content team may have hundreds or thousands of pages, and reviewing all of them manually is not practical.
+    The useful question is therefore not just "which pages are declining?" but "which pages should be checked first?"
+  </p>
+
+  <p>
+    My goal was to build a ranking system that could help answer that question.
+    Instead of making an automatic decision to rewrite or refresh a page, the model produces a review queue that a person can inspect.
+  </p>
+
+  <h2>Data</h2>
+
+  <p>
+    I used the FlyRank ML Internship warehouse release through Hugging Face.
+    The raw search-performance data was aggregated to the content-page level using DuckDB.
+  </p>
+
+  <p>
+    For the final version of the model, I only used information available before the June 2026 outcome period.
+    The target was whether June impressions were lower than May impressions.
+  </p>
+
+  <p>
+    I also filtered out pages with fewer than 50 May impressions.
+    During testing, very low-volume pages created misleadingly strong model results because a change from one impression to zero was technically counted as a decline.
+    The minimum visibility threshold helped make the final ranking more useful in practice.
+  </p>
+
+  <div class="note">
+    Public results do not include client names, domains, URLs, private queries, credentials, or raw data exports.
+  </div>
+
+  <h2>Methodology</h2>
+
+  <p>
+    The final model used a small set of historical features:
+  </p>
+
+  <ul>
+    <li>Content age</li>
+    <li>90-day impressions</li>
+    <li>Average search position</li>
+    <li>Click-through rate (CTR)</li>
+    <li>An indicator for missing average-position data</li>
+  </ul>
+
+  <p>
+    The target was binary:
+  </p>
+
+  <ul>
+    <li><strong>1</strong> = June impressions declined compared with May</li>
+    <li><strong>0</strong> = June impressions did not decline</li>
+  </ul>
+
+  <p>
+    One important part of the evaluation was the split strategy.
+    I used a client-grouped train/test split, so clients in the test set were completely separate from clients used for training.
+    This made the evaluation stricter and reduced the chance that the model was only learning client-specific patterns.
+  </p>
+
+  <p>
+    I compared three approaches:
+  </p>
+
+  <ul>
+    <li>A simple heuristic baseline</li>
+    <li>Logistic Regression</li>
+    <li>Random Forest</li>
+  </ul>
+
+  <h2>Results</h2>
+
+  <table>
+    <tr>
+      <th>Method</th>
+      <th>Precision@20</th>
+      <th>Precision@50</th>
+    </tr>
+
+    <tr>
+      <td>Test-set base rate</td>
+      <td>0.728</td>
+      <td>0.728</td>
+    </tr>
+
+    <tr>
+      <td>Baseline</td>
+      <td>0.80</td>
+      <td>0.74</td>
+    </tr>
+
+    <tr>
+      <td>Logistic Regression</td>
+      <td>0.70</td>
+      <td>0.76</td>
+    </tr>
+
+    <tr>
+      <td>Random Forest</td>
+      <td>0.95</td>
+      <td>0.96</td>
+    </tr>
+  </table>
+
+  <p>
+    The Random Forest gave the strongest ranking performance.
+    Out of the top 50 pages it ranked for review, 48 were observed to decline in the following month.
+  </p>
+
+  <p>
+    The test-set decline rate was already fairly high at about 72.8%, so I did not treat the raw precision numbers alone as enough evidence.
+    The main point is that the Random Forest ranked declining pages much more effectively near the top of the queue than the baseline or Logistic Regression.
+  </p>
+
+  <h2>Feature Importance</h2>
+
+  <table>
+    <tr>
+      <th>Feature</th>
+      <th>Importance</th>
+    </tr>
+
+    <tr>
+      <td>Content age</td>
+      <td>0.649</td>
+    </tr>
+
+    <tr>
+      <td>CTR</td>
+      <td>0.171</td>
+    </tr>
+
+    <tr>
+      <td>Average position</td>
+      <td>0.096</td>
+    </tr>
+
+    <tr>
+      <td>90-day impressions</td>
+      <td>0.083</td>
+    </tr>
+  </table>
+
+  <p>
+    Content age was the strongest predictive feature in the final Random Forest, followed by CTR and average position.
+    These values only describe how useful the features were to this model.
+    They do not prove that any of these features directly cause search performance to rise or fall.
+  </p>
+
+  <h2>Ranked Recommendations</h2>
+
+  <p>
+    The final output is a ranked review queue rather than an automatic content-editing system.
+    Each page receives a model score along with simple reason codes that help explain why it appears high in the ranking.
+  </p>
+
+  <p>
+    The main reason codes used were:
+  </p>
+
+  <ul>
+    <li><strong>OLDER_CONTENT</strong> — the page is relatively old</li>
+    <li><strong>LOW_CTR</strong> — the page receives impressions but captures relatively few clicks</li>
+    <li><strong>WEAK_AVG_POSITION</strong> — the page tends to appear lower in search results</li>
+    <li><strong>HIGH_VISIBILITY</strong> — the page already receives meaningful search exposure</li>
+  </ul>
+
+  <p>
+    Based on those signals, the review queue maps pages to actions such as:
+  </p>
+
+  <ul>
+    <li>Prioritize content and metadata review</li>
+    <li>Prioritize refresh review</li>
+    <li>Review title, snippet, and search-intent alignment</li>
+    <li>Review content depth and relevance</li>
+    <li>Monitor when the evidence is weaker</li>
+  </ul>
+
+  <h2>Limitations & Honest Framing</h2>
+
+  <p>
+    This project is observational.
+    It looks for patterns in historical search data and does not prove that refreshing a page will improve rankings, clicks, or traffic.
+  </p>
+
+  <p>
+    The decline label is also only a proxy for refresh opportunity.
+    A page can decline for reasons that have nothing to do with content quality, including seasonality, search-demand changes, competition, technical changes, or search-engine updates.
+  </p>
+
+  <p>
+    The grouped validation makes the evaluation more realistic, but it still does not guarantee the same performance on every future client or time period.
+  </p>
+
+  <p>
+    For these reasons, I would use the model to decide what to inspect first, not to automatically rewrite or remove content.
+  </p>
+
+  <h2>Reproducibility</h2>
+
+  <p>
+    The full analysis, data preparation, modeling steps, evaluation, and recommendation logic are available in the project notebook:
+  </p>
+
+  <p>
+    <code>work/notebooks/capstone_refresh_opportunity_scoring.ipynb</code>
+  </p>
+
+  <p>
+    The workflow uses DuckDB for querying the warehouse data and scikit-learn for modeling.
+    Random seeds and the grouped validation setup are kept fixed so the analysis can be reproduced.
+  </p>
+
+  <h2>Acknowledgments & Data Credit</h2>
+
+  <p>
+    Built on the
+    <a href="https://flyrank.ai" target="_blank">
+      FlyRank ML Internship dataset
+    </a>.
+  </p>
+
+</body>
+</html>
